@@ -1,0 +1,21 @@
+{
+  "name": "keios/october-csrf",
+  "description": "Package providing CSRF protection for October CMS",
+  "require": {
+    "october/rain": "^1.0@dev",
+    "laravel/framework": "5.0.*"
+  },
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Łukasz Biały",
+      "email": "lukasz@keios.eu"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Keios\\OctoberCsrf\\": "src/"
+    }
+  },
+  "minimum-stability": "dev"
+}
