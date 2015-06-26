@@ -2,7 +2,6 @@
   "name": "keios/october-csrf",
   "description": "Package providing CSRF protection for October CMS",
   "require": {
-    "october/rain": "^1.0@dev",
     "laravel/framework": "5.0.*"
   },
   "license": "MIT",
