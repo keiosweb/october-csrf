@@ -27,7 +27,9 @@ class VerifyCsrfToken
      *
      * @var array
      */
-    protected $except = [];
+    protected $except = [
+        'backend/cms/media'
+    ];
 
     /**
      * Create a new middleware instance.
