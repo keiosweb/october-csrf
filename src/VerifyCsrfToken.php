@@ -1,6 +1,7 @@
 <?php namespace Keios\OctoberCsrf;
 
 use Closure;
+use Illuminate\Contracts\Logging\Log;
 use Symfony\Component\HttpFoundation\Cookie;
 use Illuminate\Contracts\Encryption\Encrypter;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -22,6 +23,12 @@ class VerifyCsrfToken
      * @var \Illuminate\Contracts\Events\Dispatcher
      */
     protected $dispatcher;
+
+    /**
+     * @var \Illuminate\Contracts\Logging\Log
+     */
+    protected $logger;
+
     /**
      * The URIs that should be excluded from CSRF verification.
      *
@@ -38,10 +45,11 @@ class VerifyCsrfToken
      * @param  \Illuminate\Contracts\Events\Dispatcher $dispatcher
      * @return void
      */
-    public function __construct(Encrypter $encrypter, Dispatcher $dispatcher)
+    public function __construct(Encrypter $encrypter, Dispatcher $dispatcher, Log $logger)
     {
         $this->encrypter = $encrypter;
         $this->dispatcher = $dispatcher;
+        $this->logger = $logger;
     }
 
     /**
@@ -101,10 +109,15 @@ class VerifyCsrfToken
     {
         $token = $request->input('_token') ?: $request->header('X-CSRF-TOKEN');
         if (!$token && $header = $request->header('X-XSRF-TOKEN')) {
-            $token = $this->encrypter->decrypt($header);
+            try {
+                $token = $this->encrypter->decrypt($header);
+            } catch (\Exception $ex) {
+                $request->session()->flush();
+                $this->logger->error('Intercepted invalid data exception during CSRF verification. Session was flushed.');
+            }
         }
 
-	return StringUtils::equals($request->session()->token(), $token);
+	    return StringUtils::equals($request->session()->token(), $token);
     }
 
     /**
@@ -138,3 +151,4 @@ class VerifyCsrfToken
         return in_array($request->method(), ['HEAD', 'GET', 'OPTIONS']);
     }
 }
+
