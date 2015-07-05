@@ -1,6 +1,7 @@
 <?php namespace Keios\OctoberCsrf;
 
 use Closure;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Logging\Log;
 use Symfony\Component\HttpFoundation\Cookie;
 use Illuminate\Contracts\Encryption\Encrypter;
@@ -34,22 +35,25 @@ class VerifyCsrfToken
      *
      * @var array
      */
-    protected $except = [
-        'backend/cms/media'
-    ];
+    protected $except = [];
 
     /**
      * Create a new middleware instance.
      *
      * @param  \Illuminate\Contracts\Encryption\Encrypter $encrypter
      * @param  \Illuminate\Contracts\Events\Dispatcher $dispatcher
-     * @return void
+     * @param  \Illuminate\Contracts\Logging\Log $logger
+     * @param  \Illuminate\Contracts\Config\Repository $config
      */
-    public function __construct(Encrypter $encrypter, Dispatcher $dispatcher, Log $logger)
+    public function __construct(Encrypter $encrypter, Dispatcher $dispatcher, Log $logger, Repository $config)
     {
         $this->encrypter = $encrypter;
         $this->dispatcher = $dispatcher;
         $this->logger = $logger;
+        $this->config = $config;
+
+        $this->except[] = $this->config->get('cms.backendUri').'/cms';
+        $this->except[] = $this->config->get('cms.backendUri').'/cms/media';
     }
 
     /**
@@ -151,4 +155,5 @@ class VerifyCsrfToken
         return in_array($request->method(), ['HEAD', 'GET', 'OPTIONS']);
     }
 }
+
 
