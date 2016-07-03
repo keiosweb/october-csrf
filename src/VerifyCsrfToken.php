@@ -3,11 +3,11 @@
 use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Logging\Log;
+use Illuminate\Foundation\Application;
 use Symfony\Component\HttpFoundation\Cookie;
 use Illuminate\Contracts\Encryption\Encrypter;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Session\TokenMismatchException;
-use Symfony\Component\Security\Core\Util\StringUtils;
 
 class VerifyCsrfToken
 {
@@ -31,6 +31,11 @@ class VerifyCsrfToken
     protected $logger;
 
     /**
+     * @var Application
+     */
+    protected $app;
+
+    /**
      * The URIs that should be excluded from CSRF verification.
      *
      * @var array
@@ -40,13 +45,15 @@ class VerifyCsrfToken
     /**
      * Create a new middleware instance.
      *
+     * @param  \Illuminate\Foundation\Application         $app
      * @param  \Illuminate\Contracts\Encryption\Encrypter $encrypter
-     * @param  \Illuminate\Contracts\Events\Dispatcher $dispatcher
-     * @param  \Illuminate\Contracts\Logging\Log $logger
-     * @param  \Illuminate\Contracts\Config\Repository $config
+     * @param  \Illuminate\Contracts\Events\Dispatcher    $dispatcher
+     * @param  \Illuminate\Contracts\Logging\Log          $logger
+     * @param  \Illuminate\Contracts\Config\Repository    $config
      */
-    public function __construct(Encrypter $encrypter, Dispatcher $dispatcher, Log $logger, Repository $config)
+    public function __construct(Application $app, Encrypter $encrypter, Dispatcher $dispatcher, Log $logger, Repository $config)
     {
+        $this->app = $app;
         $this->encrypter = $encrypter;
         $this->dispatcher = $dispatcher;
         $this->logger = $logger;
@@ -69,10 +76,25 @@ class VerifyCsrfToken
     {
         $this->dispatcher->fire('kernel.middleware.csrf', [$this]);
 
-        if ($this->isReading($request) || $this->shouldPassThrough($request) || $this->tokensMatch($request)) {
+        if ($this->isReading($request) ||
+            $this->runningUnitTests() ||
+            $this->shouldPassThrough($request) ||
+            $this->tokensMatch($request)
+        ) {
             return $this->addCookieToResponse($request, $next($request));
         }
+
         throw new TokenMismatchException;
+    }
+
+    /**
+     * Determine if the application is running unit tests.
+     *
+     * @return bool
+     */
+    protected function runningUnitTests()
+    {
+        return $this->app->runningInConsole() && $this->app->runningUnitTests();
     }
 
     /**
@@ -95,6 +117,10 @@ class VerifyCsrfToken
     protected function shouldPassThrough($request)
     {
         foreach ($this->except as $except) {
+            if ($except !== '/') {
+                $except = trim($except, '/');
+            }
+
             if ($request->is($except)) {
                 return true;
             }
@@ -111,7 +137,10 @@ class VerifyCsrfToken
      */
     protected function tokensMatch($request)
     {
+        $sessionToken = $request->session()->token();
+
         $token = $request->input('_token') ?: $request->header('X-CSRF-TOKEN');
+
         if (!$token && $header = $request->header('X-XSRF-TOKEN')) {
             try {
                 $token = $this->encrypter->decrypt($header);
@@ -121,7 +150,11 @@ class VerifyCsrfToken
             }
         }
 
-	    return StringUtils::equals($request->session()->token(), $token);
+        if (!is_string($sessionToken) || !is_string($token)) {
+            return false;
+        }
+
+	    return hash_equals($sessionToken, $token);
     }
 
     /**
@@ -134,10 +167,11 @@ class VerifyCsrfToken
     protected function addCookieToResponse($request, $response)
     {
         $config = config('session');
+
         $response->headers->setCookie(
             new Cookie(
-                'XSRF-TOKEN', $request->session()->token(), time() + 60 * 120,
-                $config['path'], $config['domain'], false, false
+                'XSRF-TOKEN', $request->session()->token(), time() + 60 * $config['lifetime'],
+                $config['path'], $config['domain'], $config['secure'], false
             )
         );
 
